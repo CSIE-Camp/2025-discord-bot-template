@@ -271,6 +271,4 @@ async def on_message(message):
 
 # ==================== 機器人，啟動！ ==================
 
-
-# nest_asyncio.apply()
 bot.run(DISCORD_TOKEN)
