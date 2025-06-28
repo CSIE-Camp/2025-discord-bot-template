@@ -36,11 +36,11 @@ async def request_photo(prompt) -> requests.Response:
     """
     return requests.post(f"{NGROK_URL}/",json={"prompt": prompt})
 
-async def generate_photo_byteIO(ctx, *, prompt):
+async def send_AI_picture(ctx, *, prompt):
     """
     ctx: 可以發送訊息的物件。有可能是 channel, webhook, message 等等
     回傳是圖片的 URL，可以用embed 或者send等等方法發送
-    """    
+    """
     try:
         response = await request_photo(prompt)
 
@@ -56,7 +56,34 @@ async def generate_photo_byteIO(ctx, *, prompt):
       
         #將 base64 轉回圖片
         image_data = base64.b64decode(data['image'])
-        return BytesIO(image_data)                      
+        buffer = BytesIO(image_data)     
+        file = discord.File(buffer, filename="gift.png")
+        await ctx.send(file=file)
+    except Exception as e:
+         raise e # 暫時不處理錯誤
+    
+async def generate_AI_avatar(ctx, *, prompt):
+    """
+    ctx: 可以發送訊息的物件。有可能是 channel, webhook, message 等等
+    回傳是圖片的 URL，可以用embed 或者send等等方法發送
+    """
+    try:
+        response = await request_photo(prompt)
+
+        if response.status_code != 200:
+            print("API 請求失敗")
+            return ""
+
+        data = response.json()
+
+        if data['status'] != 'success':
+            print("生成圖片時發生錯誤")
+            return ""
+      
+        #將 base64 轉回圖片
+        image_data = base64.b64decode(data['image'])
+        buffer = BytesIO(image_data)
+        return buffer.read()  # 回傳圖片的 byte stream
     except Exception as e:
          raise e # 暫時不處理錯誤
 
@@ -122,13 +149,11 @@ async def on_gift():
 
     word = generate_word(f"你叫做 {pet["name"]}, 背景設定是 {pet["description"]}, 你去一個地方旅遊，你去一個地方旅遊，這個地方可能是觀光景點，可能是野外，請略為描述這個地方。現在你從這個地方給心愛主人帶回了一個禮物，是這個地方的土產或在這個地方買到的紀念品、美食、商品等等, 請描述你在此地的所見所聞，描述你帶的禮物，並給主人這一個禮物")
     place = generate_word(f"請根據以下文章，提取出文章中的地名: \n{word}")
-    buffer = await generate_photo_byteIO(ctx=channel, prompt=word)
-    file = discord.File(fp=buffer, filename="gift.png")
-
     embed = discord.Embed(title = f"{pet["name"]}", description = f"在 {place}", color=0x44ff00)
     embed.add_field(name=f"{pet["name"]}的紀錄", value=word, inline=False)
-    embed.set_image(url = "attachment://gift.png")
-    await channel.send(embed=embed, file=file)
+    await channel.send(embed=embed)
+    await send_AI_picture(ctx=channel, prompt=word)
+
 
 @bot.event
 async def on_bad_mood():
@@ -137,13 +162,12 @@ async def on_bad_mood():
     """
     channel = bot.get_channel(pet["channel_id"])
     word = generate_word(f"你叫做 {pet["name"]}, 背景設定是 {pet["description"]}, 你心情不好, 請描述情境")
-    buffer = await generate_photo_byteIO(ctx=channel, prompt=word)
-    file = discord.File(fp=buffer, filename="bad_mood.png")
-    
     embed = discord.Embed(title = f"{pet["name"]}", description = f"心情不好", color=0xff0000)
     embed.add_field(name="undefined", value="", inline=False)
     embed.set_image(url = "attachment://bad_mood.png")
-    await channel.send(embed=embed, file=file)
+    await channel.send(embed=embed)
+    buffer = await send_AI_picture(ctx=channel, prompt=word)
+    
 
 
 # ======================== 主動事件 ==========================
@@ -156,10 +180,10 @@ async def adopt(ctx, name):
     await ctx.channel.send("正在尋找最適合您的寵物...")
     
     description = generate_word(f"你是一隻可愛的寵物，名字叫做{name}，請描述一下你自己")
-    buffer = await generate_photo_byteIO(ctx=ctx, prompt=f"你是一隻名叫{name}的寵物，設定是{description}，請根據這個設定，生成一張作為寵物頭像的圖片")
-    webhook = await ctx.channel.create_webhook(name="PET_Webhook", avatar=buffer.read())
+    avatar = await generate_AI_avatar(ctx=ctx, prompt=f"你是一隻名叫{name}的寵物，設定是{description}，請根據這個設定，生成一張作為寵物頭像的圖片")
+    webhook = await ctx.channel.create_webhook(name="PET_Webhook", avatar=avatar)
 
-    pet = {"name": name, "description": description, "channel_id": ctx.channel.id, "photo_byteIO": buffer}
+    pet = {"name": name, "description": description, "channel_id": ctx.channel.id, "avatar": avatar}
 
     reset_gift_due()
     reset_bad_mood_due()
